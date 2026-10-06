@@ -393,3 +393,146 @@ class StaffBadge(Base):
 
     staff = relationship("Staff", back_populates="badges")
     level_badge = relationship("LevelBadge")
+
+
+class GroupApplicationStatus(str, enum.Enum):
+    PENDING_CONFIRM = "待确认"
+    PARTIALLY_CONFIRMED = "部分确认"
+    CONFIRMED = "已确认"
+    CANCELLED = "已取消"
+    EXPIRED = "已过期"
+
+
+class AllocationStatus(str, enum.Enum):
+    PROPOSED = "待确认"
+    CONFIRMED = "已确认"
+    CANCELLED = "已取消"
+
+
+class AllocationSource(str, enum.Enum):
+    INITIAL_SPLIT = "初始拆分"
+    WAITLIST_PROMOTION = "候补递补"
+    READMISSION = "重新入队"
+
+
+class WaitlistStatus(str, enum.Enum):
+    WAITING = "候补中"
+    PROMOTED = "已递补"
+    CANCELLED = "已取消"
+    EXPIRED = "已过期"
+
+
+class AllocationEventType(str, enum.Enum):
+    SPLIT = "拆分"
+    WAITLIST_ENQUEUE = "进入候补"
+    CONFIRM = "学校确认"
+    PARTIAL_CONFIRM = "部分接受"
+    PROMOTE = "候补递补"
+    PROMOTE_SKIP = "递补跳过"
+    REDUCE = "人数缩减"
+    EXPIRE = "超时释放"
+    CANCEL_APPLICATION = "申请取消"
+    CANCEL_LINE = "退出场次"
+    CANCEL_SESSION = "场次取消"
+    READMISSION = "重新入队"
+    UPDATE_PREF = "偏好更新"
+
+
+class GroupApplication(Base):
+    """团体（学校）研学申请：总人数、最小成团人数、有序时间偏好与同行约束"""
+    __tablename__ = "group_applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+    contact_person = Column(String(50))
+    phone = Column(String(20))
+    total_count = Column(Integer, nullable=False)
+    min_group_size = Column(Integer, nullable=False, default=1)
+    companion_note = Column(Text)
+    status = Column(Enum(GroupApplicationStatus),
+                    default=GroupApplicationStatus.PENDING_CONFIRM, nullable=False)
+    confirm_deadline = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    school = relationship("School")
+    preferences = relationship("ApplicationPreference", back_populates="application",
+                                cascade="all, delete-orphan",
+                                order_by="ApplicationPreference.seq")
+    allocations = relationship("ApplicationAllocation", back_populates="application",
+                               cascade="all, delete-orphan")
+    waitlist_entries = relationship("WaitlistEntry", back_populates="application",
+                                    cascade="all, delete-orphan")
+    events = relationship("AllocationEvent", back_populates="application",
+                          cascade="all, delete-orphan",
+                          order_by="AllocationEvent.id")
+
+
+class ApplicationPreference(Base):
+    """申请的时间偏好：按 seq 排序的意向场次"""
+    __tablename__ = "application_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    seq = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("GroupApplication", back_populates="preferences")
+    session = relationship("Session")
+
+
+class ApplicationAllocation(Base):
+    """申请在单个场次上的容量分配（拆分明细）；待确认期间为软预留，确认后形成正式占用"""
+    __tablename__ = "application_allocations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    count = Column(Integer, nullable=False)
+    status = Column(Enum(AllocationStatus), default=AllocationStatus.PROPOSED, nullable=False)
+    source = Column(Enum(AllocationSource), default=AllocationSource.INITIAL_SPLIT,
+                    nullable=False)
+    source_waitlist_seq = Column(Integer)
+    confirm_deadline = Column(DateTime)
+    confirmed_at = Column(DateTime)
+    cancel_reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("GroupApplication", back_populates="allocations")
+    session = relationship("Session")
+
+
+class WaitlistEntry(Base):
+    """全局候补队列条目：seq 为排队顺序依据，preferred_session_ids 为有序意向场次(JSON)"""
+    __tablename__ = "waitlist_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    remaining_count = Column(Integer, nullable=False)
+    original_count = Column(Integer, nullable=False)
+    seq = Column(Integer, nullable=False, index=True)
+    preferred_session_ids = Column(Text, nullable=False, default="[]")
+    status = Column(Enum(WaitlistStatus), default=WaitlistStatus.WAITING, nullable=False)
+    close_reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("GroupApplication", back_populates="waitlist_entries")
+
+
+class AllocationEvent(Base):
+    """容量分配审计事件：记录每次拆分、确认、递补、缩减、取消的原因与守恒快照"""
+    __tablename__ = "allocation_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    waitlist_seq = Column(Integer)
+    action = Column(Enum(AllocationEventType), nullable=False)
+    count = Column(Integer, default=0)
+    reason = Column(Text, nullable=False)
+    snapshot = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("GroupApplication", back_populates="events")
+    session = relationship("Session")

@@ -639,3 +639,127 @@ class StaffPointDetail(StaffRankingItem):
     is_excellent: bool
     positive_review_rate: float
     monthly_points: int = 0
+
+
+# ---------------------------------------------------------------------------
+# 团体申请容量分配与候补递补
+# ---------------------------------------------------------------------------
+
+class GroupApplicationCreate(BaseModel):
+    school_id: int
+    total_count: int = Field(ge=1, description="申请总人数")
+    min_group_size: int = Field(default=1, ge=1, description="最小成团人数")
+    preferred_session_ids: List[int] = Field(..., min_length=1,
+                                             description="按时间偏好排序的意向场次ID")
+    companion_note: Optional[str] = Field(None, description="同行约束说明")
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    confirm_deadline_hours: Optional[float] = Field(
+        None, gt=0, description="确认时限（小时），缺省取系统配置")
+
+
+class AllocationLine(BaseModel):
+    id: int
+    session_id: int
+    session_title: str
+    session_start_time: Optional[datetime] = None
+    count: int
+    status: str
+    source: str
+    source_waitlist_seq: Optional[int] = None
+    confirm_deadline: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    cancel_reason: Optional[str] = None
+
+
+class WaitlistItem(BaseModel):
+    seq: int
+    application_id: int
+    school_name: str = ""
+    remaining_count: int
+    original_count: int = 0
+    status: str
+    preferred_session_ids: List[int] = []
+
+
+class AllocationEventSchema(BaseModel):
+    id: int
+    action: str
+    count: int
+    session_id: Optional[int] = None
+    session_title: Optional[str] = None
+    waitlist_seq: Optional[int] = None
+    reason: str
+    snapshot: dict
+    created_at: datetime
+
+
+class ConservationSummary(BaseModel):
+    total_count: int
+    occupied_confirmed: int
+    soft_reserved: int
+    waiting: int
+    current_total: int
+    conserved: bool
+    detail: str
+
+
+class GroupApplicationSummary(BaseModel):
+    id: int
+    school_id: int
+    school_name: str
+    total_count: int
+    min_group_size: int
+    status: str
+    companion_note: Optional[str] = None
+    confirm_deadline: Optional[datetime] = None
+    occupied_confirmed: int
+    soft_reserved: int
+    waiting: int
+    current_total: int
+    conserved: bool
+    created_at: datetime
+
+
+class GroupApplicationDetail(GroupApplicationSummary):
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    preferences: List[int] = []
+    allocations: List[AllocationLine] = []
+    waitlist: List[WaitlistItem] = []
+    events: List[AllocationEventSchema] = []
+    conservation: ConservationSummary
+
+
+class GroupApplicationConfirm(BaseModel):
+    accept_allocation_ids: Optional[List[int]] = Field(
+        None, description="接受的明细ID列表；不传或为null表示全部接受，传部分ID表示部分接受")
+
+
+class GroupApplicationReduce(BaseModel):
+    new_total: int = Field(ge=1, description="缩减后的申请总人数")
+
+
+class ReasonRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class SessionCancelRequest(BaseModel):
+    reason: Optional[str] = None
+    operator: str = "工作人员"
+
+
+class SessionCapacityView(BaseModel):
+    session_id: int
+    session_title: str
+    status: str
+    start_time: Optional[datetime] = None
+    capacity: Optional[int] = None
+    occupied_confirmed: int
+    soft_reserved: int
+    available: Optional[int] = None
+    waitlist: List[WaitlistItem] = []
+
+
+class WaitlistPrefsUpdate(BaseModel):
+    preferred_session_ids: List[int] = Field(..., description="新的有序意向场次ID（可为空）")
