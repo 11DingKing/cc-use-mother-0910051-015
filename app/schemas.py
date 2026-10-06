@@ -7,7 +7,8 @@ from app.models import (
     StaffType, SessionType, SessionStatus,
     AssignmentRole, AudienceType, WarningType,
     ChangeType, ChangeStatus, ConflictType, RescheduleStatus,
-    PointSourceType
+    PointSourceType, GroupApplicationStatus, AllocationStatus,
+    WaitlistStatus, AllocationEventType
 )
 
 
@@ -639,3 +640,147 @@ class StaffPointDetail(StaffRankingItem):
     is_excellent: bool
     positive_review_rate: float
     monthly_points: int = 0
+
+
+class GroupApplicationBase(BaseModel):
+    school_id: int
+    theme_id: int
+    total_count: int = Field(gt=0, description="报名总人数")
+    min_group_size: int = Field(ge=1, description="最小成团人数")
+    co_travel_size: int = Field(ge=1, description="同行约束单元人数（不可拆分）")
+    preferred_start: Optional[datetime] = None
+    preferred_end: Optional[datetime] = None
+    confirm_deadline: Optional[datetime] = None
+    note: Optional[str] = None
+
+
+class GroupApplicationCreate(GroupApplicationBase):
+    pass
+
+
+class GroupAllocationItem(BaseModel):
+    id: int
+    session_id: int
+    session_title: str
+    session_start_time: Optional[datetime] = None
+    split_seq: int
+    allocated_count: int
+    confirmed_count: int
+    status: AllocationStatus
+    reason: Optional[str] = None
+    confirm_deadline: Optional[datetime] = None
+    created_at: datetime
+    confirmed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class WaitlistEntryItem(BaseModel):
+    id: int
+    session_id: Optional[int] = None
+    queue_seq: int
+    requested_count: int
+    status: WaitlistStatus
+    reason: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AllocationEventItem(BaseModel):
+    id: int
+    event_type: AllocationEventType
+    quantity: int
+    reason: Optional[str] = None
+    operator: Optional[str] = None
+    session_id: Optional[int] = None
+    allocation_id: Optional[int] = None
+    waitlist_entry_id: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ConservationSummary(BaseModel):
+    application_id: int
+    original_total_count: int
+    total_count: int
+    released_count: int
+    proposed_count: int
+    confirmed_count: int
+    waiting_count: int
+    conserved: bool
+    message: str
+
+
+class GroupApplicationItem(GroupApplicationBase):
+    id: int
+    school_name: str
+    theme_name: str
+    original_total_count: int
+    released_count: int
+    status: GroupApplicationStatus
+    proposed_count: int = 0
+    confirmed_count: int = 0
+    waiting_count: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GroupApplicationDetail(GroupApplicationItem):
+    allocations: List[GroupAllocationItem] = []
+    waitlist_entries: List[WaitlistEntryItem] = []
+    events: List[AllocationEventItem] = []
+    conservation: Optional[ConservationSummary] = None
+
+
+class ConfirmAllocationItem(BaseModel):
+    allocation_id: int
+    accepted_count: int = Field(ge=0, description="学校接受的人数，0表示不接受")
+
+
+class GroupApplicationConfirmRequest(BaseModel):
+    items: List[ConfirmAllocationItem]
+    operator: str = "学校确认"
+
+
+class GroupApplicationReduceRequest(BaseModel):
+    new_total_count: int = Field(ge=0, description="缩减后的总人数")
+    operator: str = "学校申请"
+    reason: Optional[str] = None
+
+
+class GroupApplicationCancelRequest(BaseModel):
+    operator: str = "学校申请"
+    reason: Optional[str] = None
+
+
+class SessionWaitlistItem(BaseModel):
+    waitlist_entry_id: int
+    application_id: int
+    school_name: str
+    queue_position: int
+    queue_seq: int
+    requested_count: int
+    eligible: bool
+    eligibility_reason: str
+    created_at: datetime
+
+
+class SessionWaitlistView(BaseModel):
+    session_id: int
+    session_title: str
+    remaining_capacity: int
+    order_basis: str
+    entries: List[SessionWaitlistItem] = []
+
+
+class ExpireSweepResult(BaseModel):
+    expired_count: int
+    expired_allocation_ids: List[int] = []
+    message: str

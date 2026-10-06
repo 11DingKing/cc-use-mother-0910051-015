@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     STARTER_THRESHOLD: int = 5
     WARNING_STAFF_SHORTAGE_THRESHOLD: float = 0.3
 
+    GROUP_CONFIRM_TIMEOUT_HOURS: int = 48
+
     class Config:
         env_file = ".env"
 

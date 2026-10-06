@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
-from app.routers import staff, themes, venues, schools, sessions, reviews, warnings, statistics, changes, ranking
+from app.routers import staff, themes, venues, schools, sessions, reviews, warnings, statistics, changes, ranking, group_applications
 
 Base.metadata.create_all(bind=engine)
 
@@ -31,6 +31,7 @@ app.include_router(warnings.router)
 app.include_router(statistics.router)
 app.include_router(changes.router)
 app.include_router(ranking.router)
+app.include_router(group_applications.router)
 
 
 @app.get("/", tags=["系统"])

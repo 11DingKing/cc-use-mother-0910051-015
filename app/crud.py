@@ -341,6 +341,13 @@ def update_session(db: Session, session_id: int,
             else:
                 validation_errors.append("人员配置不足，需重新核对排班")
 
+    if db_session.status == SessionStatus.CANCELLED and old_status != SessionStatus.CANCELLED:
+        # 场次取消：释放团体申请的占用，人数回到候补队列并按当前资格原子递补到其他场次
+        from app import group_allocation
+        group_allocation.release_session_allocations(
+            db, session_id, operator="系统",
+            reason="场次取消，释放团体申请占用并触发候补递补", commit=False)
+
     db.commit()
     db.refresh(db_session)
     return db_session, validation_errors

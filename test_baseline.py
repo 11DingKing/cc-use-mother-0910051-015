@@ -30,3 +30,10 @@ def test_core_workflow(tmp_path: Path) -> None:
     core_dir.mkdir()
     core_output = run_script("test_unit.py", core_dir)
     assert "所有测试通过" in core_output, core_output
+
+
+def test_group_allocation_workflow(tmp_path: Path) -> None:
+    group_dir = tmp_path / "group"
+    group_dir.mkdir()
+    group_output = run_script("test_group_allocation.py", group_dir)
+    assert "所有测试通过" in group_output, group_output

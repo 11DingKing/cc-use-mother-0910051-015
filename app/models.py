@@ -393,3 +393,118 @@ class StaffBadge(Base):
 
     staff = relationship("Staff", back_populates="badges")
     level_badge = relationship("LevelBadge")
+
+
+class GroupApplicationStatus(str, enum.Enum):
+    PENDING = "待确认"
+    PARTIALLY_CONFIRMED = "部分确认"
+    CONFIRMED = "已全部确认"
+    CLOSED = "已关闭"
+
+
+class AllocationStatus(str, enum.Enum):
+    PROPOSED = "待学校确认"
+    CONFIRMED = "已确认占用"
+    REJECTED = "学校未接受"
+    EXPIRED = "超时未确认"
+    CANCELLED = "已取消"
+
+
+class WaitlistStatus(str, enum.Enum):
+    WAITING = "候补中"
+    PROMOTED = "已递补"
+    CANCELLED = "已取消"
+
+
+class AllocationEventType(str, enum.Enum):
+    SPLIT = "拆分"
+    WAITLIST = "进入候补"
+    CONFIRM = "确认占用"
+    PARTIAL_CONFIRM = "部分确认"
+    REDUCE = "缩减人数"
+    EXPIRE = "超时释放"
+    PROMOTE = "候补递补"
+    SESSION_CANCEL = "场次取消释放"
+    CANCEL = "申请取消"
+
+
+class GroupApplication(Base):
+    __tablename__ = "group_applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+    theme_id = Column(Integer, ForeignKey("themes.id"), nullable=False)
+    original_total_count = Column(Integer, nullable=False)
+    total_count = Column(Integer, nullable=False)
+    released_count = Column(Integer, default=0)
+    min_group_size = Column(Integer, nullable=False, default=1)
+    co_travel_size = Column(Integer, nullable=False, default=1)
+    preferred_start = Column(DateTime)
+    preferred_end = Column(DateTime)
+    confirm_deadline = Column(DateTime)
+    status = Column(Enum(GroupApplicationStatus), default=GroupApplicationStatus.PENDING)
+    note = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    school = relationship("School")
+    theme = relationship("Theme")
+    allocations = relationship("GroupAllocation", back_populates="application", cascade="all, delete-orphan")
+    waitlist_entries = relationship("WaitlistEntry", back_populates="application", cascade="all, delete-orphan")
+    events = relationship("AllocationEvent", back_populates="application", cascade="all, delete-orphan")
+
+
+class GroupAllocation(Base):
+    __tablename__ = "group_allocations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    split_seq = Column(Integer, nullable=False, default=1)
+    allocated_count = Column(Integer, nullable=False)
+    confirmed_count = Column(Integer, default=0)
+    status = Column(Enum(AllocationStatus), default=AllocationStatus.PROPOSED)
+    reason = Column(Text)
+    confirm_deadline = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    confirmed_at = Column(DateTime(timezone=True))
+
+    application = relationship("GroupApplication", back_populates="allocations")
+    session = relationship("Session")
+
+
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    queue_seq = Column(Integer, nullable=False)
+    requested_count = Column(Integer, nullable=False)
+    status = Column(Enum(WaitlistStatus), default=WaitlistStatus.WAITING)
+    reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    application = relationship("GroupApplication", back_populates="waitlist_entries")
+    session = relationship("Session")
+
+
+class AllocationEvent(Base):
+    __tablename__ = "allocation_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("group_applications.id"), nullable=False)
+    allocation_id = Column(Integer, ForeignKey("group_allocations.id"))
+    waitlist_entry_id = Column(Integer, ForeignKey("waitlist_entries.id"))
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    event_type = Column(Enum(AllocationEventType), nullable=False)
+    quantity = Column(Integer, nullable=False, default=0)
+    reason = Column(Text)
+    operator = Column(String(100), default="系统")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("GroupApplication", back_populates="events")
+    allocation = relationship("GroupAllocation")
+    waitlist_entry = relationship("WaitlistEntry")
+    session = relationship("Session")
